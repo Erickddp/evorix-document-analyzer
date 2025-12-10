@@ -1,5 +1,5 @@
+import type { DocumentMetadata } from "../../types/documents";
+
 export interface MetadataResult {
-    author: string | null;
-    software: string | null;
-    creationDate: string | null;
+    metadata: DocumentMetadata;
 }

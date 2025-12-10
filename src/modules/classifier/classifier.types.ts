@@ -1,6 +1,7 @@
-export type ClassifierLabel = "invoice" | "contract" | "unknown";
+import type { DocumentKind } from "../../types/documents";
 
 export interface ClassifierResult {
-    label: ClassifierLabel;
-    score: number;
+    kind: DocumentKind;
+    confidence: number; // 0–1
+    hints: string[];    // palabras clave usadas para clasificar
 }

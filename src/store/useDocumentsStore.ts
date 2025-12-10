@@ -3,9 +3,12 @@ import type {
     DocumentAnalysis,
     DocumentsFilters,
     DocumentKind,
-    DocumentScanState,
     ScanJobMetrics,
 } from '../types/documents';
+
+import { quickExtractFromFile } from "../modules/extractor/extractor.mock";
+import { extractBasicMetadata } from "../modules/metadata/metadata.mock";
+import { classifyDocument } from "../modules/classifier/classifier.mock";
 
 // Update MOCK_DOCS to match new interface
 const MOCK_DOCS: DocumentAnalysis[] = [
@@ -189,6 +192,16 @@ export function useDocumentsStore() {
     // Use a ref to prevent overlapping processing intervals/timeouts
     const processingRef = useRef<number | null>(null);
 
+    // Ref to hold actual File objects
+    const fileBufferRef = useRef<Map<string, File>>(new Map());
+
+    // Effect to trigger queuing if items are added and loop not running
+    useEffect(() => {
+        if (scanJob.isScanning && !processingRef.current) {
+            startProcessingLoop();
+        }
+    }, [items, scanJob.isScanning]);
+
     const filtered = useMemo(() => {
         return items.filter(doc => {
             // 1. Search
@@ -242,6 +255,7 @@ export function useDocumentsStore() {
         setFiltersState(DEFAULT_FILTERS);
         setSelectedId(null);
         setScanJob(DEFAULT_SCAN_JOB);
+        fileBufferRef.current.clear();
         if (processingRef.current) {
             clearTimeout(processingRef.current);
             processingRef.current = null;
@@ -276,10 +290,14 @@ export function useDocumentsStore() {
             const kind = inferKindFromExtension(extension);
             const ocrEligible = extension === "pdf" || ["jpg", "jpeg", "png", "heic", "webp"].includes(extension);
             const estMs = estimateQuickScanMs(file.size);
+            const id = generateDocumentId(file);
+
+            // Store file in buffer
+            fileBufferRef.current.set(id, file);
 
             return {
                 basic: {
-                    id: generateDocumentId(file),
+                    id,
                     fileName: file.name,
                     extension,
                     sizeBytes: file.size,
@@ -290,7 +308,8 @@ export function useDocumentsStore() {
                         estimatedQuickMs: estMs,
                         errorMessage: null
                     },
-                    ocrEligible
+                    ocrEligible,
+                    kind // required property
                 },
                 metadata: {},
                 keyData: {},
@@ -302,18 +321,9 @@ export function useDocumentsStore() {
         setItems(prev => [...prev, ...newDocs]);
 
         setScanJob(prev => {
-            const totalFiles = prev.totalFiles + newDocs.length; // Accumulate or reset? Usually accumulate if job running.
-            // If we want to treat this *ingest* as part of a job, we add to total.
-            // If job was idle, we start new.
             const isAlreadyScanning = prev.isScanning;
-            const processedFiles = isAlreadyScanning ? prev.processedFiles : prev.processedFiles; // Actually, if we add docs, they are unpaid.
-            // Wait, 'processedFiles' counts 'completed/deep-scannable'.
-            // We know newDocs are queued, so they are NOT processed.
+            const processedFiles = isAlreadyScanning ? prev.processedFiles : prev.processedFiles;
 
-            // Let's assume prev.processedFiles is correct for existing items. 
-            // We just add to totalFiles.
-
-            // Simple logic:
             const currentTotal = items.length + newDocs.length;
             const pending = currentTotal - processedFiles; // roughly
             const estMsPerFile = 500;
@@ -327,13 +337,7 @@ export function useDocumentsStore() {
             };
         });
 
-        // Trigger processing loop
-        // processQueuedDocuments() is internal and will be triggered by useEffect watching items/scanJob state,
-        // OR we can explicitly call a function that sets a timeout.
-        // Prompt asks: "2.5. Crear una función interna processQueuedDocuments que Se llame al final de ingestFiles".
-        // Since state updates are async, invoking it directly might not see new items immediately unless we pass them or wait.
-        // However, the cleanest React way is useEffect. But following instructions strictly: I will call a function that *initiates* the loop if not running.
-
+        // Start loop will happen via Effect or manual trigger
         startProcessingLoop();
     };
 
@@ -345,61 +349,29 @@ export function useDocumentsStore() {
     };
 
     const processQueuedDocuments = () => {
+        // 1. Mark batch as "quick-scanning"
+        // 2. Trigger runBatchExtraction
         setItems(currentItems => {
-            // Find queued items
-            const queuedIndices = currentItems
-                .map((item, index) => ({ item, index }))
-                .filter(({ item }) => item.basic.scan.phase === "queued");
+            const queued = currentItems.filter(d => d.basic.scan.phase === "queued");
+            const batch = queued.slice(0, 3); // Max 3 at a time
 
-            if (queuedIndices.length === 0) {
-                // No more items to process
-                processingRef.current = null;
-
-                // Mark job as finished in separate state update
-                setScanJob(prev => ({
-                    ...prev,
-                    isScanning: false,
-                    estimatedMsRemaining: null
-                }));
+            if (batch.length === 0) {
+                // No more items
+                if (processingRef.current) {
+                    processingRef.current = null;
+                }
+                // IMPORTANT: Updating state here might be tricky if we want to stop scanJob too.
+                // We'll let runBatchExtraction handle final cleanup if empty.
                 return currentItems;
             }
 
-            // Process batch (e.g. 3)
-            const batchSize = 3;
-            const processingBatch = queuedIndices.slice(0, batchSize);
-
-            // We need to know how long to wait for THIS batch simulation.
-            // Max estimatedQuickMs of the batch?
-            const maxWait = Math.max(...processingBatch.map(x => x.item.basic.scan.estimatedQuickMs || 500), 500);
-
-            // Schedule next tick
-            processingRef.current = window.setTimeout(processQueuedDocuments, maxWait);
-
-            // Update Scan Job Metrics immediately (optimistic update of progress text)
-            // Note: We can't easily update 'scanJob' state inside this 'setItems' callback derived logic nicely without separate effect,
-            // but we can schedule a setScanJob.
-
-            // Return updated items: mark them as "deep-scannable" (completed quick scan) directly for simplicity,
-            // OR mark them "quick-scanning" then "completed" in next tick.
-            // Title says: "quick-scanning" -> "deep-scannable".
-            // To keep it simple and effective:
-            // Mark currently queued as "deep-scannable" directly implies they ARE processed.
-            // If we want to show "Scanning...", we should have marked them "quick-scanning" BEFORE the timeout.
-
-            // Improved flow:
-            // 1. Find "queued".
-            // 2. Mark top 3 as "quick-scanning".
-            // 3. Wait.
-            // 4. Mark those as "deep-scannable" AND find next 3 "queued".
-
-            // This requires state transition.
-            return currentItems.map((doc, idx) => {
-                if (processingBatch.some(pb => pb.index === idx)) {
+            return currentItems.map(doc => {
+                if (batch.some(b => b.basic.id === doc.basic.id)) {
                     return {
                         ...doc,
                         basic: {
                             ...doc.basic,
-                            scan: { ...doc.basic.scan, phase: "deep-scannable" }
+                            scan: { ...doc.basic.scan, phase: "quick-scanning" }
                         }
                     };
                 }
@@ -407,18 +379,110 @@ export function useDocumentsStore() {
             });
         });
 
-        // Update metrics after batch processed
-        setScanJob(prev => {
-            const newProcessed = prev.processedFiles + 3; // roughly
-            const safeProcessed = Math.min(newProcessed, prev.totalFiles);
-            const pending = prev.totalFiles - safeProcessed;
+        // We need to defer this slightly so state updates
+        setTimeout(() => {
+            void runBatchExtraction();
+        }, 50);
+    };
 
-            return {
-                ...prev,
-                processedFiles: safeProcessed,
-                estimatedMsRemaining: pending > 0 ? pending * 500 : 0
-            };
+    const runBatchExtraction = async () => {
+        // We need to get the items from state. Ideally use a ref or setState callback to read.
+        // Since we are in a closure, we can't reliably read 'items' variable.
+        // We must use setItems to get access to current state 'prev'.
+
+        let docsToProcess: DocumentAnalysis[] = [];
+
+        // Hack to read state inside async function without being inside a component render cycle properly?
+        // Actually, setScanJob(prev => ...) gives us access.
+        // Let's use setItems to "read" state and not change it effectively, or change it as we process.
+
+        // To properly implement "async function runBatchExtraction" that reads state:
+        // It's recursive.
+
+        setItems(prevItems => {
+            docsToProcess = prevItems.filter(doc => doc.basic.scan.phase === "quick-scanning");
+            return prevItems; // No change yet
         });
+
+        if (docsToProcess.length === 0) {
+            // Check if any queued left?
+            setItems(prevItems => {
+                const queued = prevItems.filter(d => d.basic.scan.phase === "queued");
+                if (queued.length === 0) {
+                    setScanJob(job => ({ ...job, isScanning: false, estimatedMsRemaining: 0 }));
+                    if (processingRef.current) processingRef.current = null;
+                } else {
+                    // Continue loop
+                    if (!processingRef.current) {
+                        processingRef.current = window.setTimeout(processQueuedDocuments, 50);
+                    } else {
+                        // reset?
+                        clearTimeout(processingRef.current);
+                        processingRef.current = window.setTimeout(processQueuedDocuments, 50);
+                    }
+                }
+                return prevItems;
+            });
+            return;
+        }
+
+        // Process them
+        for (const doc of docsToProcess) {
+            const file = fileBufferRef.current.get(doc.basic.id);
+            if (!file) {
+                setItems(prev => prev.map(d => d.basic.id === doc.basic.id ?
+                    { ...d, basic: { ...d.basic, scan: { ...d.basic.scan, phase: "error", errorMessage: "File lost" } } }
+                    : d));
+                continue;
+            }
+
+            try {
+                const { metadata } = extractBasicMetadata(file, doc.basic);
+                const extractor = await quickExtractFromFile(file, doc.basic);
+                // Wait a bit to simulate processing time visually if it was too fast
+                if (extractor.keyData.rfcs && extractor.keyData.rfcs.length === 0) {
+                    await new Promise(r => setTimeout(r, 200));
+                }
+                const classifier = classifyDocument(doc.basic, extractor.keyData, metadata);
+
+                setItems(prev => prev.map(d => {
+                    if (d.basic.id !== doc.basic.id) return d;
+                    return {
+                        ...d,
+                        basic: {
+                            ...d.basic,
+                            kind: classifier.kind,
+                            scan: { ...d.basic.scan, phase: "completed", errorMessage: null }
+                        },
+                        metadata,
+                        keyData: extractor.keyData,
+                        classificationConfidence: classifier.confidence
+                    };
+                }));
+
+                // Update progress
+                setScanJob(prev => {
+                    const processed = prev.processedFiles + 1;
+                    const pending = Math.max(prev.totalFiles - processed, 0);
+                    return {
+                        ...prev,
+                        processedFiles: processed,
+                        estimatedMsRemaining: pending * 500
+                    };
+                });
+
+            } catch (err) {
+                setItems(prev => prev.map(d => d.basic.id === doc.basic.id ?
+                    { ...d, basic: { ...d.basic, scan: { ...d.basic.scan, phase: "error", errorMessage: "Processing failed" } } }
+                    : d));
+            }
+        }
+
+        // After processing this batch, trigger next
+        if (processingRef.current) {
+            clearTimeout(processingRef.current);
+        }
+        processingRef.current = window.setTimeout(processQueuedDocuments, 50);
     };
 
     return {

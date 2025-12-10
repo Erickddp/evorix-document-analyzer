@@ -38,16 +38,24 @@ export function ScanSummaryStrip({ documents }: ScanSummaryStripProps) {
 
             {/* Scan Progress Strip */}
             {isScanning ? (
-                <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900 p-3 flex items-center justify-between text-sm animate-pulse">
-                    <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 text-blue-500 animate-spin border-2 border-blue-500 border-t-transparent rounded-full font-bold"></div>
-                        <span className="font-medium text-blue-700 dark:text-blue-300">
-                            Escaneando {scanJob.processedFiles} / {scanJob.totalFiles} documentos...
+                <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900 p-3 flex flex-col gap-2 animate-pulse">
+                    <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 text-blue-500 animate-spin border-2 border-blue-500 border-t-transparent rounded-full font-bold"></div>
+                            <span className="font-medium text-blue-700 dark:text-blue-300">
+                                Escaneando {scanJob.processedFiles} / {scanJob.totalFiles} documentos...
+                            </span>
+                        </div>
+                        <span className="text-blue-600 dark:text-blue-400 font-mono">
+                            ~{estimatedSec} s restantes
                         </span>
                     </div>
-                    <span className="text-blue-600 dark:text-blue-400 font-mono">
-                        ~{estimatedSec} s restantes
-                    </span>
+                    <div className="w-full bg-blue-200 dark:bg-blue-800 rounded-full h-1.5 mt-1">
+                        <div
+                            className="bg-blue-600 dark:bg-blue-400 h-1.5 rounded-full transition-all duration-300"
+                            style={{ width: `${progressPct}%` }}
+                        ></div>
+                    </div>
                 </div>
             ) : (
                 scanJob.totalFiles > 0 && scanJob.processedFiles === scanJob.totalFiles && (

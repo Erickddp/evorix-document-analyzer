@@ -10,7 +10,7 @@ export function FileDropZone() {
         setIsDragging(true);
     };
 
-    const handleDragLeave = (e: React.DragEvent) => {
+    const handleDragLeave = () => {
         // Check if we are really leaving the zone (and not entering a child)
         // e.currentTarget.contains(e.relatedTarget) logic can be useful but for this simple UI, just false is okay
         setIsDragging(false);

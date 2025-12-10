@@ -1,4 +1,7 @@
+import type { DocumentKeyData } from "../../types/documents";
+
 export interface ExtractorResult {
-    confidence: number;
-    fields: Record<string, string | number | null>;
+    keyData: DocumentKeyData;
+    contentPreview: string | null;
+    language?: "es" | "en" | "other" | null;
 }
