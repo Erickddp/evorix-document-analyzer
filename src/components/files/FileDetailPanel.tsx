@@ -35,7 +35,8 @@ export function FileDetailPanel({
     const {
         runKeyDataQuickScan: storeRunKeyDataQuickScan,
         runKeyDataFullScan: storeRunKeyDataFullScan,
-        exportDocumentSummaryCsv
+        exportDocumentSummaryCsv,
+        reclassifyDocument
     } = useDocumentsStore();
 
     // Helper functions inside component
@@ -249,7 +250,7 @@ export function FileDetailPanel({
                                 Coincidencia: {confidencePct}%
                             </span>
                         </div>
-                        <ActionButton onClick={() => onReclassify(basic.id)} label="Re-clasificar" secondary small />
+                        <ActionButton onClick={() => reclassifyDocument(basic.id)} label="Re-clasificar" secondary small />
                     </div>
                     {/* <ActionButton onClick={() => onExportClassificationCsv([basic.id])} label="" secondary small /> */}
                 </ModuleCard>

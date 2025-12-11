@@ -8,7 +8,7 @@ import type {
 
 import { quickExtractFromFile } from "../modules/extractor/extractor.mock";
 import { extractBasicMetadata, extractDeepMetadata, type MetadataResultRaw } from "../modules/metadata/metadata.mock";
-import { classifyDocument } from "../modules/classifier/classifier.mock";
+import { inferDocumentKind } from "../modules/classifier/classifier";
 
 // --- Types ---
 
@@ -62,18 +62,6 @@ function emitChange() {
 }
 
 // --- Helpers ---
-
-function inferKindFromExtension(ext: string): DocumentKind {
-    switch (ext) {
-        case 'xml': return 'factura';
-        case 'pdf': return 'documento_general';
-        case 'doc': case 'docx': return 'documento_general';
-        case 'xls': case 'xlsx': return 'datos_tabulares';
-        case 'ppt': case 'pptx': return 'presentacion';
-        case 'jpg': case 'jpeg': case 'png': return 'imagen';
-        default: return 'desconocido';
-    }
-}
 
 function estimateQuickScanMs(sizeBytes: number): number {
     if (sizeBytes < 1024 * 1024) return 200 + Math.random() * 200;
@@ -150,6 +138,11 @@ export function useDocumentsStore() {
         return true;
     });
 
+    // --- Actions ---
+
+    // Removed broken imports and local helpers
+    // import { classifyDocument } from "../modules/classifier/classifier.mock"; 
+
     // Actions
     const setFilters = (partial: Partial<DocumentsFilters>) => {
         storeState = { ...storeState, filters: { ...storeState.filters, ...partial } };
@@ -189,7 +182,7 @@ export function useDocumentsStore() {
 
             const newDocs: DocumentAnalysis[] = filesArray.map(file => {
                 const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
-                const kind = inferKindFromExtension(extension);
+                const kind = inferDocumentKind({ fileName: file.name, extension });
                 const estMs = estimateQuickScanMs(file.size);
                 const id = generateDocumentId(file);
                 fileBuffer.set(id, file);
@@ -200,7 +193,7 @@ export function useDocumentsStore() {
                         scan: { phase: "queued" as const, estimatedQuickMs: estMs, errorMessage: null },
                         ocrEligible: extension === "pdf" || ["jpg", "jpeg", "png"].includes(extension), kind
                     },
-                    metadata: {}, keyData: { names: [], rfcs: [], dates: [], amounts: [], keys: [] }, classificationConfidence: 0.1
+                    metadata: {}, keyData: { names: [], rfcs: [], dates: [], amounts: [], keys: [] }, classificationConfidence: 0.5
                 };
             });
 
@@ -276,16 +269,19 @@ export function useDocumentsStore() {
                 const metadata = normalizeMetadataBasic(rawMeta);
                 const extractor = await quickExtractFromFile(file, doc.basic);
                 await new Promise(r => setTimeout(r, 100)); // Sim delay
-                const classifier = classifyDocument(doc.basic, extractor.keyData, metadata);
+
+                // Use new classifier
+                const kind = inferDocumentKind(doc.basic);
+                const confidence = kind === "OTRO" || kind === "PDF_GENERAL" ? 0.6 : 0.95;
 
                 const newItems = storeState.items.map(d => {
                     if (d.basic.id !== doc.basic.id) return d;
                     return {
                         ...d,
-                        basic: { ...d.basic, kind: classifier.kind, scan: { ...d.basic.scan, phase: "completed" as const, errorMessage: null } },
+                        basic: { ...d.basic, kind, scan: { ...d.basic.scan, phase: "completed" as const, errorMessage: null } },
                         metadata,
                         keyData: extractor.keyData,
-                        classificationConfidence: classifier.confidence
+                        classificationConfidence: confidence
                     };
                 });
                 const processed = storeState.scanJob.processedFiles + 1;
@@ -520,11 +516,21 @@ export function useDocumentsStore() {
     };
 
     const reclassifyDocument = async (docId: string) => {
+        const doc = storeState.items.find(d => d.basic.id === docId);
+        if (!doc) return;
+
+        const kind = inferDocumentKind(doc.basic);
+        // Reglas de confianza simples
+        let confidence = 0.5;
+        if (kind === 'FACTURA' || kind === 'XML_CFDI') confidence = 0.98;
+        else if (kind === 'ESTADO_CUENTA') confidence = 0.90;
+        else if (kind !== 'OTRO' && kind !== 'PDF_GENERAL') confidence = 0.85;
+
         const newItems = storeState.items.map(d => {
             if (d.basic.id !== docId) return d;
-            const res = classifyDocument(d.basic, d.keyData, d.metadata);
-            return { ...d, basic: { ...d.basic, kind: res.kind }, classificationConfidence: res.confidence };
+            return { ...d, basic: { ...d.basic, kind }, classificationConfidence: confidence };
         });
+
         storeState = { ...storeState, items: newItems, summary: buildSummaryFromItems(newItems) };
         emitChange();
     };

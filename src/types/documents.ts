@@ -1,26 +1,24 @@
 export type DocumentKind =
-    | 'factura'
-    | 'ticket_recibo'
-    | 'nomina'
-    | 'contrato'
-    | 'reporte'
-    | 'documento_general'
-    | 'imagen'
-    | 'datos_tabulares'
-    | 'presentacion'
-    | 'desconocido';
+    | "FACTURA"
+    | "XML_CFDI"
+    | "TICKET"
+    | "ESTADO_CUENTA"
+    | "HOJA_CALCULO"
+    | "PDF_GENERAL"
+    | "IMAGEN"
+    | "TEXTO"
+    | "OTRO";
 
 export const DOCUMENT_KIND_LABEL_ES: Record<DocumentKind, string> = {
-    factura: 'Factura',
-    ticket_recibo: 'Ticket / Recibo',
-    nomina: 'Nómina',
-    contrato: 'Contrato',
-    reporte: 'Reporte',
-    documento_general: 'Documento',
-    imagen: 'Imagen',
-    datos_tabulares: 'Hoja de cálculo',
-    presentacion: 'Presentación',
-    desconocido: 'Desconocido',
+    FACTURA: "Factura",
+    XML_CFDI: "XML CFDI",
+    TICKET: "Ticket / Nota",
+    ESTADO_CUENTA: "Estado de cuenta",
+    HOJA_CALCULO: "Hoja de cálculo",
+    PDF_GENERAL: "Documento PDF",
+    IMAGEN: "Imagen",
+    TEXTO: "Texto",
+    OTRO: "Otro"
 };
 
 export type ScanPhase = "idle" | "queued" | "quick-scanning" | "deep-scannable" | "completed" | "error";
