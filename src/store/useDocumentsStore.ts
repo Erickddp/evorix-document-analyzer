@@ -7,7 +7,7 @@ import type {
 } from '../types/documents';
 
 import { quickExtractFromFile } from "../modules/extractor/extractor.mock";
-import { extractBasicMetadata } from "../modules/metadata/metadata.mock";
+import { extractBasicMetadata, extractDeepMetadata, type MetadataResultRaw } from "../modules/metadata/metadata.mock";
 import { classifyDocument } from "../modules/classifier/classifier.mock";
 
 // --- Types ---
@@ -65,12 +65,13 @@ function emitChange() {
 
 function inferKindFromExtension(ext: string): DocumentKind {
     switch (ext) {
-        case 'xml': return 'invoice';
-        case 'pdf': return 'report';
-        case 'doc': case 'docx': return 'letter';
-        case 'xls': case 'xlsx': return 'report';
-        case 'jpg': case 'jpeg': case 'png': return 'other';
-        default: return 'unknown';
+        case 'xml': return 'factura';
+        case 'pdf': return 'documento_general';
+        case 'doc': case 'docx': return 'documento_general';
+        case 'xls': case 'xlsx': return 'datos_tabulares';
+        case 'ppt': case 'pptx': return 'presentacion';
+        case 'jpg': case 'jpeg': case 'png': return 'imagen';
+        default: return 'desconocido';
     }
 }
 
@@ -94,7 +95,7 @@ function buildSummaryFromItems(items: DocumentAnalysis[]): ScanSummary {
     let totalSizeBytes = 0;
 
     items.forEach(doc => {
-        const k = doc.basic.kind || 'unknown';
+        const k = doc.basic.kind || 'desconocido';
         kindCount[k] = (kindCount[k] || 0) + 1;
         const ext = (doc.basic.extension || 'other').toUpperCase();
         extCount[ext] = (extCount[ext] || 0) + 1;
@@ -271,7 +272,8 @@ export function useDocumentsStore() {
             }
 
             try {
-                const { metadata } = extractBasicMetadata(file, doc.basic);
+                const rawMeta = await extractBasicMetadata(doc);
+                const metadata = normalizeMetadataBasic(rawMeta);
                 const extractor = await quickExtractFromFile(file, doc.basic);
                 await new Promise(r => setTimeout(r, 100)); // Sim delay
                 const classifier = classifyDocument(doc.basic, extractor.keyData, metadata);
@@ -308,61 +310,213 @@ export function useDocumentsStore() {
     // --- Module Actions ---
 
     const runKeyDataQuickScan = async (docId: string) => {
-        // Mock impl
-        console.log("Quick scan", docId);
+        const doc = storeState.items.find(d => d.basic.id === docId);
+        if (!doc) return;
+
+        const file = fileBuffer.get(docId);
+        if (!file) {
+            console.error('[Store] File buffer missing for:', docId);
+            return;
+        }
+
+        try {
+            // Reusing logic from batch extraction
+            const extractor = await quickExtractFromFile(file, doc.basic);
+
+            const newItems = storeState.items.map(d => {
+                if (d.basic.id !== docId) return d;
+                return {
+                    ...d,
+                    keyData: {
+                        ...extractor.keyData,
+                        hasQuickScan: true
+                    },
+                    // Optional: Update scan phase if needed, though UI uses keyData flags mostly
+                    basic: {
+                        ...d.basic,
+                        scan: { ...d.basic.scan, phase: "completed" as const, errorMessage: null }
+                    }
+                };
+            });
+            storeState = { ...storeState, items: newItems };
+            emitChange();
+        } catch (error) {
+            console.error('[KeyData] Quick scan error', error);
+            const newItems = storeState.items.map(d => d.basic.id === docId ? { ...d, basic: { ...d.basic, scan: { ...d.basic.scan, phase: "error" as const, errorMessage: String(error) } } } : d);
+            storeState = { ...storeState, items: newItems };
+            emitChange();
+        }
     };
 
     const runKeyDataFullScan = async (docId: string) => {
-        console.log("Full scan", docId);
+        const doc = storeState.items.find(d => d.basic.id === docId);
+        if (!doc) return;
+
+        // Mock LLM Response
+        const simulatedLLMKeyData = {
+            extracted: {
+                rfcs: ["XAXX010101000"],
+                dates: ["2024-01-05"],
+                amounts: [5392.00],
+                names: ["EMPRESA DEMO SA DE CV", "CLIENTE PRUEBA"],
+                keys: ["FACTURA-123", "AUTH-999"]
+            },
+            score: 0.92,
+            tags: ["financial", "invoice", "regex-validated"]
+        };
+
+        await new Promise(r => setTimeout(r, 600)); // Sim delay
+
+        const newItems = storeState.items.map(d => {
+            if (d.basic.id !== docId) return d;
+            return {
+                ...d,
+                keyData: {
+                    ...d.keyData,
+                    rfcs: Array.from(new Set([...d.keyData.rfcs, ...simulatedLLMKeyData.extracted.rfcs])),
+                    dates: Array.from(new Set([...d.keyData.dates, ...simulatedLLMKeyData.extracted.dates])),
+                    amounts: Array.from(new Set([...d.keyData.amounts, ...simulatedLLMKeyData.extracted.amounts])),
+                    names: Array.from(new Set([...d.keyData.names, ...simulatedLLMKeyData.extracted.names])),
+                    keys: Array.from(new Set([...d.keyData.keys, ...simulatedLLMKeyData.extracted.keys])),
+                    score: simulatedLLMKeyData.score,
+                    tags: simulatedLLMKeyData.tags,
+                    hasFullContent: true
+                }
+            };
+        });
+        storeState = { ...storeState, items: newItems };
+        emitChange();
     };
 
     const requestDeepScan = (docId: string) => {
         console.log("Deep scan requested", docId);
     };
 
-    const exportKeyDataCsv = (_ids: string[]) => {
-        return "id,key,value\n1,mock,data";
+    const exportKeyDataCsv = (ids: string[]) => {
+        const targetDocs = storeState.items.filter(d => ids.includes(d.basic.id));
+        if (targetDocs.length === 0) return "";
+
+        const allKeys = new Set<string>(["FileName", "Kind", "Score", "Tags", "RFCs", "Dates", "Amounts", "Names"]);
+
+        let csv = Array.from(allKeys).join(",") + "\n";
+
+        targetDocs.forEach(doc => {
+            const row = [
+                doc.basic.fileName,
+                doc.basic.kind,
+                doc.keyData.score ? (doc.keyData.score * 100).toFixed(0) + "%" : "",
+                doc.keyData.tags ? `"${doc.keyData.tags.join(';')}"` : "",
+                `"${doc.keyData.rfcs.join(';')}"`,
+                `"${doc.keyData.dates.join(';')}"`,
+                `"${doc.keyData.amounts.join(';')}"`,
+                `"${doc.keyData.names.join(';')}"`
+            ];
+            csv += row.join(",") + "\n";
+        });
+        return csv;
     };
 
-    const runMetadataBasicScan = async (docId: string) => {
-        // const file = fileBuffer.get(docId);
-        const newItems = storeState.items.map(d => {
-            if (d.basic.id !== docId) return d;
+    const runMetadataBasicScan = async (documentId: string) => {
+        const { items } = storeState; // access current state
+        const target = items.find(d => d.basic.id === documentId);
+        if (!target) return;
+
+        try {
+            console.log('[Metadata] L1 basic scan for', documentId);
+            const raw = await extractBasicMetadata(target);
+            const normalized = normalizeMetadataBasic(raw);
+
+            setStoreState(state => ({
+                items: state.items.map(doc =>
+                    doc.basic.id === documentId
+                        ? {
+                            ...doc,
+                            metadata: {
+                                ...(doc.metadata || {}),
+                                ...normalized,
+                                hasBasicScan: true,
+                                levels: {
+                                    ...(doc.metadata?.levels || {}),
+                                    l1: true,
+                                },
+                            },
+                        }
+                        : doc
+                ),
+            }));
+        } catch (error) {
+            console.error('[Metadata] L1 scan error', error);
+        }
+    };
+
+    const runMetadataDeepScan = async (documentId: string) => {
+        const { items } = storeState;
+        const target = items.find(d => d.basic.id === documentId);
+        if (!target) return;
+
+        try {
+            console.log('[Metadata] L2 deep scan for', documentId);
+            const raw = await extractDeepMetadata(target);
+            const normalized = normalizeMetadataDeep(raw);
+
+            setStoreState(state => ({
+                items: state.items.map(doc =>
+                    doc.basic.id === documentId
+                        ? {
+                            ...doc,
+                            metadata: {
+                                ...(doc.metadata || {}),
+                                ...normalized,
+                                hasDeepScan: true,
+                                hasBasicScan: true, // Deep usually implies basic is also done or available
+                                levels: {
+                                    ...(doc.metadata?.levels || {}),
+                                    l1: true,
+                                    l2: true,
+                                },
+                            },
+                        }
+                        : doc
+                ),
+            }));
+        } catch (error) {
+            console.error('[Metadata] L2 scan error', error);
+        }
+    };
+
+    const exportMetadataCsv = (documentIds: string[]) => {
+        const { items } = storeState;
+        const selected = documentIds.length
+            ? items.filter(d => documentIds.includes(d.basic.id))
+            : items;
+
+        const rows = selected.map(doc => {
+            const m = doc.metadata || {};
             return {
-                ...d,
-                metadata: {
-                    ...d.metadata,
-                    author: d.metadata.author || "Unknown",
-                    software: d.metadata.software || "EVORIX-Scanner",
-                    createdAt: d.metadata.createdAt || d.basic.uploadedAt,
-                    hasMetadataScan: true,
-                    // If we had file info we could add mimeType etc here like in Step 131
-                }
+                id: doc.basic.id,
+                name: doc.basic.fileName,
+                size: m.fileSize ?? doc.basic.sizeBytes,
+                mimeType: m.mimeType,
+                createdAt: m.createdAt,
+                updatedAt: m.modifiedAt, // mapping updatedAt from prompt to modifiedAt
+                author: m.author,
+                owner: m.owner,
+                location: m.location,
+                pages: m.pageCount, // mapped from pages
+                device: m.device,
+                appName: m.appName,
             };
         });
-        storeState = { ...storeState, items: newItems, summary: buildSummaryFromItems(newItems) };
-        emitChange();
+
+        const csv = buildCsvFromObjects(rows);
+        downloadCsvFile(csv, `evorix_metadata_${Date.now()}.csv`);
     };
 
-    const runMetadataDeepScan = async (docId: string) => {
-        const newItems = storeState.items.map(d => {
-            if (d.basic.id !== docId) return d;
-            return {
-                ...d,
-                metadata: {
-                    ...d.metadata,
-                    hasDeepScan: true,
-                    exifCamera: "Simulated Deep Scan Camera",
-                    hasMetadataScan: true
-                }
-            };
-        });
-        storeState = { ...storeState, items: newItems, summary: buildSummaryFromItems(newItems) };
+    // Helper functions for updating state safely
+    const setStoreState = (updater: (state: GlobalState) => Partial<GlobalState>) => {
+        const partial = updater(storeState);
+        storeState = { ...storeState, ...partial, summary: buildSummaryFromItems(partial.items || storeState.items) };
         emitChange();
-    };
-
-    const exportMetadataCsv = (_ids: string[]) => {
-        return "fileName,author\nfile1.pdf,me";
     };
 
     const reclassifyDocument = async (docId: string) => {
@@ -395,6 +549,83 @@ export function useDocumentsStore() {
         emitChange();
     };
 
+    const exportDocumentSummaryCsv = (docId: string) => {
+        const doc = storeState.items.find(d => d.basic.id === docId);
+        if (!doc) {
+            console.log('Document not found for export:', docId);
+            return;
+        }
+
+        // Helper to escape CSV strings
+        const esc = (val: any) => {
+            if (val === null || val === undefined) return "";
+            const s = String(val);
+            if (s.includes(",") || s.includes("\n") || s.includes('"')) {
+                return `"${s.replace(/"/g, '""')}"`;
+            }
+            return s;
+        };
+
+        // Helper for arrays
+        const list = (arr: any[]) => esc(arr.join('; '));
+
+        const headers = [
+            "fileName", "extension", "sizeBytes", "kind", "uploadedAt",
+            "rfcs", "dates", "mainAmount", "names",
+            "mime_type", "file_size", "pages", "created_at", "updated_at",
+            "author", "owner", "software", "device", "app_name", "location", "gps",
+            "meta_l1", "meta_l2",
+            "classification", "classificationConfidence",
+            "ocrPreview"
+        ];
+
+        const amounts = doc.keyData.amounts || [];
+        const mainAmount = amounts.length > 0 ? Math.max(...amounts) : "";
+
+        const gpsStr = doc.metadata.gpsCoordinates
+            ? `${doc.metadata.gpsCoordinates.lat},${doc.metadata.gpsCoordinates.lng}`
+            : "";
+
+        const row = [
+            esc(doc.basic.fileName),
+            esc(doc.basic.extension),
+            doc.basic.sizeBytes,
+            esc(doc.basic.kind),
+            esc(doc.basic.uploadedAt),
+            list(doc.keyData.rfcs),
+            list(doc.keyData.dates),
+            mainAmount,
+            list(doc.keyData.names),
+            esc(doc.metadata.mimeType), // Mime type
+            doc.metadata.fileSize ?? "", // File size
+            doc.metadata.pageCount ?? "", // Paginas
+            esc(doc.metadata.createdAt),
+            esc(doc.metadata.modifiedAt), // Modificado en
+            esc(doc.metadata.author), // Autor
+            esc(doc.metadata.owner), // Propietario
+            esc(doc.metadata.software), // Software
+            esc(doc.metadata.device), // Dispositivo
+            esc(doc.metadata.appName), // App Origen
+            esc(doc.metadata.location), // Ubicacion
+            esc(gpsStr),
+            doc.metadata.levels?.l1 ? "true" : "false", // meta_l1
+            doc.metadata.levels?.l2 ? "true" : "false", // meta_l2
+            esc(doc.basic.kind),
+            (doc.classificationConfidence * 100).toFixed(0) + "%",
+            esc(doc.ocrInfo?.rawTextPreview?.slice(0, 120) || "")
+        ];
+
+        const csvString = headers.join(",") + "\n" + row.join(",");
+
+        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `evorix_document_summary_${doc.basic.fileName}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+    };
+
     return {
         items: state.items,
         filtered,
@@ -412,6 +643,7 @@ export function useDocumentsStore() {
         runKeyDataQuickScan,
         runKeyDataFullScan,
         exportKeyDataCsv,
+        exportDocumentSummaryCsv,
         runMetadataBasicScan,
         runMetadataDeepScan,
         exportMetadataCsv,
@@ -421,3 +653,63 @@ export function useDocumentsStore() {
         startProcessing
     };
 }
+
+// --- Helper Functions ---
+
+function normalizeMetadataBasic(raw: MetadataResultRaw) {
+    return {
+        // Map raw fields to DocumentMetadata
+        mimeType: raw.mimeType,
+        fileSize: raw.fileSize,
+        createdAt: raw.createdAt,
+        modifiedAt: raw.updatedAt,
+    };
+}
+
+function normalizeMetadataDeep(raw: MetadataResultRaw) {
+    return {
+        author: raw.author,
+        owner: raw.owner,
+        software: raw.software,
+        device: raw.device,
+        location: raw.location,
+        appName: raw.appName,
+        pageCount: raw.pages,
+        gpsCoordinates: raw.gps ? parseGps(raw.gps as any) : undefined,
+        exifCamera: raw.device,
+        exifLocation: raw.location,
+    };
+}
+
+function parseGps(gpsStr: string): { lat: number; lng: number } | undefined {
+    try {
+        const parts = gpsStr.split(',').map(s => parseFloat(s.replace(/[^\d.-]/g, '')));
+        if (parts.length >= 2) return { lat: parts[0], lng: parts[1] };
+    } catch { }
+    return undefined;
+}
+
+function buildCsvFromObjects(rows: any[]): string {
+    if (!rows.length) return "";
+    const headers = Object.keys(rows[0]);
+    const csvRows = [
+        headers.join(','),
+        ...rows.map(row => headers.map(header => {
+            const val = row[header] ?? "";
+            const escaped = String(val).replace(/"/g, '""');
+            return `"${escaped}"`;
+        }).join(','))
+    ];
+    return csvRows.join('\n');
+}
+
+function downloadCsvFile(content: string, filename: string) {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+}
+

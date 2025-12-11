@@ -10,10 +10,10 @@ export function HeaderBar({ isDark, toggleTheme }: HeaderBarProps) {
         <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md transition-colors duration-200 mb-6">
             <div className="flex flex-col">
                 <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-                    EVORIX <span className="text-slate-400 dark:text-slate-600">|</span> <span className="font-light text-slate-600 dark:text-slate-300">Smart Document Analyzer</span>
+                    EVORIX <span className="text-slate-400 dark:text-slate-600">|</span> <span className="font-light text-slate-600 dark:text-slate-300">Analizador de documentos</span>
                 </h1>
                 <span className="text-xs text-slate-500 dark:text-slate-500 hidden sm:block">
-                    Analiza documentos, extrae insights, sin ruido visual.
+                    Visualiza documentos, extrae insights, sin ruido visual.
                 </span>
             </div>
 

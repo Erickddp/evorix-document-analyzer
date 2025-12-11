@@ -1,15 +1,27 @@
 export type DocumentKind =
-    | "unknown"
-    | "invoice"
-    | "contract"
-    | "receipt"
-    | "letter"
-    | "report"
-    | "payroll"
-    | "bank_statement"
-    | "id"
-    | "policy"
-    | "other";
+    | 'factura'
+    | 'ticket_recibo'
+    | 'nomina'
+    | 'contrato'
+    | 'reporte'
+    | 'documento_general'
+    | 'imagen'
+    | 'datos_tabulares'
+    | 'presentacion'
+    | 'desconocido';
+
+export const DOCUMENT_KIND_LABEL_ES: Record<DocumentKind, string> = {
+    factura: 'Factura',
+    ticket_recibo: 'Ticket / Recibo',
+    nomina: 'Nómina',
+    contrato: 'Contrato',
+    reporte: 'Reporte',
+    documento_general: 'Documento',
+    imagen: 'Imagen',
+    datos_tabulares: 'Hoja de cálculo',
+    presentacion: 'Presentación',
+    desconocido: 'Desconocido',
+};
 
 export type ScanPhase = "idle" | "queued" | "quick-scanning" | "deep-scannable" | "completed" | "error";
 
@@ -38,8 +50,14 @@ export interface DocumentMetadata {
     modifiedAt?: string | null;
     device?: string | null;
     mimeType?: string | null;
-    pageCount?: number; // Preserving pageCount as it was in mock usage
-    gpsCoordinates?: { lat: number; lng: number }; // Preserving mock usage
+    pageCount?: number;
+    gpsCoordinates?: { lat: number; lng: number };
+
+    // New fields requested
+    owner?: string | null;
+    appName?: string | null;
+    location?: string | null;
+    fileSize?: number;
 
     // EXIF básico – solo para imágenes (simulado por ahora)
     exifCamera?: string | null;
@@ -47,8 +65,13 @@ export interface DocumentMetadata {
 
     hasBasicScan?: boolean;
     hasDeepScan?: boolean;
-    hasMetadataScan?: boolean; // legacy flag kept for compatibility
+    hasMetadataScan?: boolean;
     lastUpdatedAt?: string | null;
+
+    levels?: {
+        l1?: boolean;
+        l2?: boolean;
+    };
 }
 
 export interface DocumentKeyData {
@@ -57,6 +80,9 @@ export interface DocumentKeyData {
     dates: string[];
     amounts: number[];
     keys: string[];
+    // Extended properties for LLM scan
+    score?: number;
+    tags?: string[];
     // flags de estado
     hasQuickScan?: boolean;
     hasFullContent?: boolean;

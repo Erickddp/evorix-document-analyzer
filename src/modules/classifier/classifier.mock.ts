@@ -4,64 +4,80 @@ import type {
     DocumentMetadata,
     DocumentKind,
 } from "../../types/documents";
-import type { ClassifierResult } from "./classifier.types";
 
 export function classifyDocument(
     basic: DocumentBasic,
     keyData: DocumentKeyData,
-    _metadata: DocumentMetadata
-): ClassifierResult {
-    const name = basic.fileName.toLowerCase();
-    const hints: string[] = [];
-    let kind: DocumentKind = basic.kind ?? "unknown";
-    let confidence = 0.1;
+    metadata: DocumentMetadata
+): { kind: DocumentKind; confidence: number } {
+    const ext = basic.extension.toLowerCase();
+    const hasRfc = keyData.rfcs && keyData.rfcs.length > 0;
+    const hasAmounts = keyData.amounts && keyData.amounts.length > 0;
+    const pageCount = metadata.pageCount ?? null;
+    const textSignals = keyData.rawText?.toLowerCase?.() ?? '';
+    // Also check names or other hints if available in rawText or keyData
+    // We can simulate textSignals from what we have if rawText is missing but we have extracted data
+    // but the prompt implies we might have rawText. 
+    // In the store, we pass 'extractor.keyData'. 
 
-    const pushHint = (h: string) => {
-        if (!hints.includes(h)) hints.push(h);
-    };
+    // Capa 1: por extensión base
+    let baseKind: DocumentKind = 'desconocido';
 
-    // 1) Por nombre / extensión
-    if (name.includes("factura") || name.includes("invoice")) {
-        kind = "invoice";
-        confidence = 0.7;
-        pushHint("nombre: factura/invoice");
+    if (['xml', 'pdf'].includes(ext)) baseKind = 'documento_general';
+    if (['jpg', 'jpeg', 'png', 'webp', 'tiff'].includes(ext)) baseKind = 'imagen';
+    if (['xls', 'xlsx', 'csv'].includes(ext)) baseKind = 'datos_tabulares';
+    if (['doc', 'docx', 'odt', 'rtf'].includes(ext)) baseKind = 'documento_general';
+    if (['ppt', 'pptx'].includes(ext)) baseKind = 'presentacion';
+
+    // Capa 2: señales de factura / ticket
+    // If rawText isn't present, we rely on other indicators or just filename if extraction failed
+    const filenameSignals = basic.fileName.toLowerCase();
+    const combinedSignals = (textSignals + ' ' + filenameSignals).toLowerCase();
+
+    const hasInvoiceWords =
+        combinedSignals.includes('factura') ||
+        combinedSignals.includes('cfdi') ||
+        combinedSignals.includes('sat') ||
+        combinedSignals.includes('xml'); // XML often implies invoice in this context
+
+    // Ticket words
+    const hasTicketWords =
+        combinedSignals.includes('ticket') ||
+        combinedSignals.includes('compra') ||
+        combinedSignals.includes('caja') ||
+        combinedSignals.includes('recibo');
+
+    // Logic from prompt
+    if (['xml', 'pdf'].includes(ext) && hasRfc && hasAmounts && hasInvoiceWords) {
+        return { kind: 'factura', confidence: 0.95 };
     }
 
-    if (name.includes("contrato") || name.includes("contract")) {
-        kind = "contract";
-        confidence = 0.7;
-        pushHint("nombre: contrato/contract");
+    if (baseKind === 'imagen' || (ext === 'pdf' && hasTicketWords && hasAmounts)) {
+        return { kind: 'ticket_recibo', confidence: 0.80 };
     }
 
-    if (name.includes("recibo") || name.includes("receipt")) {
-        kind = "receipt";
-        confidence = 0.6;
-        pushHint("nombre: recibo/receipt");
+    if (pageCount && pageCount > 20 && !hasRfc && !hasAmounts && ext === 'pdf') {
+        return { kind: 'documento_general', confidence: 0.70 }; // libro / documento largo
     }
 
-    if (name.includes("nomina") || name.includes("payroll")) {
-        kind = "payroll";
-        confidence = 0.6;
-        pushHint("nombre: nómina/payroll");
+    if (baseKind === 'datos_tabulares') {
+        return { kind: 'datos_tabulares', confidence: hasAmounts ? 0.85 : 0.60 };
     }
 
-    // 2) Por contenido clave
-    if (keyData.rfcs && keyData.rfcs.length > 0 && confidence < 0.9) {
-        // presencia de RFC suele indicar documento fiscal
-        if (kind === "unknown") kind = "invoice";
-        confidence = Math.max(confidence, 0.8);
-        pushHint("contiene RFC");
+    if (baseKind === 'presentacion') {
+        return { kind: 'presentacion', confidence: 0.75 };
     }
 
-    if (keyData.amounts && keyData.amounts.length > 0 && confidence < 0.85) {
-        confidence = Math.max(confidence, 0.6);
-        pushHint("contiene montos numéricos");
+    if (baseKind === 'documento_general') {
+        // Differentiation between report, contract, generic
+        if (combinedSignals.includes('contrato')) return { kind: 'contrato', confidence: 0.85 };
+        if (combinedSignals.includes('nomina')) return { kind: 'nomina', confidence: 0.85 };
+        if (combinedSignals.includes('reporte')) return { kind: 'reporte', confidence: 0.85 };
+
+        return { kind: 'documento_general', confidence: hasInvoiceWords ? 0.60 : 0.50 };
     }
 
-    // Si no se detectó nada relevante, mantén kind actual
-    return {
-        kind,
-        confidence,
-        hints,
-    };
+    // Default fallbacks
+    return { kind: baseKind, confidence: 0.40 };
 }
+

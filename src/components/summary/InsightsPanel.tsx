@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { DocumentAnalysis } from '../../types/documents';
+import { type DocumentAnalysis, DOCUMENT_KIND_LABEL_ES, type DocumentKind } from '../../types/documents';
 
 interface InsightsPanelProps {
     documents: DocumentAnalysis[];
@@ -49,7 +49,7 @@ export function InsightsPanel({ documents }: InsightsPanelProps) {
                     {stats.typeEntries.map(([kind, count]) => (
                         <div key={kind}>
                             <div className="flex justify-between text-xs text-slate-500 mb-1">
-                                <span className="capitalize">{kind}</span>
+                                <span className="capitalize">{DOCUMENT_KIND_LABEL_ES[kind as DocumentKind] ?? kind}</span>
                                 <span>{count}</span>
                             </div>
                             <div className="w-full h-2 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden">

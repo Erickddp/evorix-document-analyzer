@@ -15,8 +15,7 @@ function App() {
   const {
     filtered, filters, selectedId, setFilters, selectDocument, items,
     scanJob,
-    runKeyDataQuickScan, runKeyDataFullScan, exportKeyDataCsv,
-    runMetadataBasicScan, runMetadataDeepScan, exportMetadataCsv,
+    runMetadataBasicScan, runMetadataDeepScan, // exportMetadataCsv,
     reclassifyDocument, exportClassificationCsv,
     runOcrForDocument
   } = store;
@@ -88,13 +87,11 @@ function App() {
             <div className="h-full flex flex-col">
               <FileDetailPanel
                 document={selectedDoc}
-                onKeyDataQuickScan={runKeyDataQuickScan}
-                onKeyDataFullScan={runKeyDataFullScan}
-                onExportKeyDataCsv={exportKeyDataCsv}
+
 
                 onMetadataBasicScan={runMetadataBasicScan}
                 onMetadataDeepScan={runMetadataDeepScan}
-                onExportMetadataCsv={exportMetadataCsv}
+                // onExportMetadataCsv={exportMetadataCsv}
 
                 onReclassify={reclassifyDocument}
                 onExportClassificationCsv={exportClassificationCsv}
