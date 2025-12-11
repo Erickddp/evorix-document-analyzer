@@ -4,13 +4,22 @@ import { HeaderBar } from './layout/HeaderBar';
 import { SidebarModules } from './layout/SidebarModules';
 import { FileDropZone } from './components/upload/FileDropZone';
 import { ScanSummaryStrip } from './components/summary/ScanSummaryStrip';
+import { InsightsPanel } from './components/summary/InsightsPanel';
 import { FiltersBar } from './components/filters/FiltersBar';
 import { FilesTable } from './components/files/FilesTable';
 import { FileDetailPanel } from './components/files/FileDetailPanel';
 import { useDocumentsStore } from './store/useDocumentsStore';
 
 function App() {
-  const { filtered, filters, selectedId, setFilters, selectDocument, items } = useDocumentsStore();
+  const store = useDocumentsStore();
+  const {
+    filtered, filters, selectedId, setFilters, selectDocument, items,
+    runKeyDataQuickScan, runKeyDataFullScan, exportKeyDataCsv,
+    runMetadataBasicScan, runMetadataDeepScan, exportMetadataCsv,
+    reclassifyDocument, exportClassificationCsv,
+    runOcrForDocument
+  } = store;
+
   const [isDark, setIsDark] = useState(false);
 
   // Theme Toggle Logic
@@ -53,8 +62,9 @@ function App() {
           </section>
 
           {/* Quick Stats */}
-          <section>
-            <ScanSummaryStrip documents={filtered} />
+          <section className="space-y-6">
+            <ScanSummaryStrip documents={items} />
+            <InsightsPanel documents={items} />
           </section>
 
           {/* Search & Filtering */}
@@ -75,7 +85,20 @@ function App() {
 
             {/* Right: Details */}
             <div className="h-full flex flex-col">
-              <FileDetailPanel document={selectedDoc} />
+              <FileDetailPanel
+                document={selectedDoc}
+                onKeyDataQuickScan={runKeyDataQuickScan}
+                onKeyDataFullScan={runKeyDataFullScan}
+                onExportKeyDataCsv={exportKeyDataCsv}
+
+                onMetadataBasicScan={runMetadataBasicScan}
+                onMetadataDeepScan={runMetadataDeepScan}
+                onExportMetadataCsv={exportMetadataCsv}
+
+                onReclassify={reclassifyDocument}
+                onExportClassificationCsv={exportClassificationCsv}
+                onRunOcr={runOcrForDocument}
+              />
             </div>
           </div>
         </main>

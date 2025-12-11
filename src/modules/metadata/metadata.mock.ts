@@ -13,8 +13,8 @@ export function extractBasicMetadata(
         modifiedAt: createdAt,
         software: null,
         device: null,
-        gpsCoordinates: null,
-        pageCount: null, // Requiere parseo específico por tipo (PDF, DOCX, etc.)
+        gpsCoordinates: undefined,
+        pageCount: undefined, // Requiere parseo específico por tipo (PDF, DOCX, etc.)
     };
 
     return { metadata };

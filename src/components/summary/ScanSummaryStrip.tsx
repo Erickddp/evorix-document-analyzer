@@ -5,16 +5,14 @@ interface ScanSummaryStripProps {
     documents: DocumentAnalysis[];
 }
 
-export function ScanSummaryStrip({ documents }: ScanSummaryStripProps) {
-    const { scanJob } = useDocumentsStore();
+export function ScanSummaryStrip({ }: ScanSummaryStripProps) {
+    const { scanJob, summary } = useDocumentsStore();
 
-    const totalDocs = documents.length;
-    const uniqueTypes = new Set(documents.map(d => d.basic.kind)).size;
-    const withMetadata = documents.filter(d => Object.keys(d.metadata).length > 0).length;
-    const pctMetadata = totalDocs > 0 ? Math.round((withMetadata / totalDocs) * 100) : 0;
+    const totalDocs = summary.totalDocs;
+    const uniqueTypes = summary.detectedTypes;
+    const pctMetadata = summary.docsWithMetadataPct;
 
-    const totalSize = documents.reduce((acc, d) => acc + d.basic.sizeBytes, 0);
-    const sizeMb = (totalSize / (1024 * 1024)).toFixed(1);
+    const sizeMb = (summary.totalSizeBytes / (1024 * 1024)).toFixed(1);
 
     // Scan progress calculation
     const isScanning = scanJob.isScanning;

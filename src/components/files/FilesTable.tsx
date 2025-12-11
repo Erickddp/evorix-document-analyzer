@@ -77,6 +77,11 @@ export function FilesTable({ documents, onSelect, selectedId }: FilesTableProps)
                                 statusText = 'Error';
                             }
 
+                            // Confidence format
+                            const confidencePct = doc.classificationConfidence > 0
+                                ? `${(doc.classificationConfidence * 100).toFixed(0)}%`
+                                : '-';
+
                             return (
                                 <tr
                                     key={doc.basic.id}
@@ -103,7 +108,7 @@ export function FilesTable({ documents, onSelect, selectedId }: FilesTableProps)
                                         {hasMeta ? "Sí" : "No"}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
-                                        {(doc.classificationConfidence * 100).toFixed(0)}%
+                                        {confidencePct}
                                     </td>
                                 </tr>
                             );
@@ -114,3 +119,4 @@ export function FilesTable({ documents, onSelect, selectedId }: FilesTableProps)
         </div>
     );
 }
+

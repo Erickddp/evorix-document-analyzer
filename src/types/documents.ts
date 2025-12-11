@@ -33,23 +33,43 @@ export interface DocumentBasic {
 
 export interface DocumentMetadata {
     author?: string | null;
+    software?: string | null;
     createdAt?: string | null;
     modifiedAt?: string | null;
-    software?: string | null;
     device?: string | null;
-    gpsCoordinates?: {
-        lat: number;
-        lng: number;
-    } | null;
-    pageCount?: number | null;
+    mimeType?: string | null;
+    pageCount?: number; // Preserving pageCount as it was in mock usage
+    gpsCoordinates?: { lat: number; lng: number }; // Preserving mock usage
+
+    // EXIF básico – solo para imágenes (simulado por ahora)
+    exifCamera?: string | null;
+    exifLocation?: string | null;
+
+    hasBasicScan?: boolean;
+    hasDeepScan?: boolean;
+    hasMetadataScan?: boolean; // legacy flag kept for compatibility
+    lastUpdatedAt?: string | null;
 }
 
 export interface DocumentKeyData {
-    names?: string[];
-    rfcs?: string[];
-    dates?: string[];
-    amounts?: number[];
-    keys?: string[];
+    names: string[];
+    rfcs: string[];
+    dates: string[];
+    amounts: number[];
+    keys: string[];
+    // flags de estado
+    hasQuickScan?: boolean;
+    hasFullContent?: boolean;
+    lastUpdatedAt?: string | null;
+    // stored text for L2
+    rawText?: string | null;
+}
+
+export interface DocumentOcrInfo {
+    hasOcrText: boolean;
+    engine?: string | null;
+    processedAt?: string | null;
+    rawTextPreview?: string | null;
 }
 
 export interface DocumentAnalysis {
@@ -57,6 +77,7 @@ export interface DocumentAnalysis {
     metadata: DocumentMetadata;
     keyData: DocumentKeyData;
     classificationConfidence: number; // 0–1
+    ocrInfo?: DocumentOcrInfo;
 }
 
 export interface DocumentsFilters {
