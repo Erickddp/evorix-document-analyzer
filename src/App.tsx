@@ -14,6 +14,7 @@ function App() {
   const store = useDocumentsStore();
   const {
     filtered, filters, selectedId, setFilters, selectDocument, items,
+    scanJob,
     runKeyDataQuickScan, runKeyDataFullScan, exportKeyDataCsv,
     runMetadataBasicScan, runMetadataDeepScan, exportMetadataCsv,
     reclassifyDocument, exportClassificationCsv,
@@ -63,7 +64,7 @@ function App() {
 
           {/* Quick Stats */}
           <section className="space-y-6">
-            <ScanSummaryStrip documents={items} />
+            <ScanSummaryStrip documents={items} scanJob={scanJob} />
             <InsightsPanel documents={items} />
           </section>
 

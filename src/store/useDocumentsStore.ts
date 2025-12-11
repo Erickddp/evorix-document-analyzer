@@ -21,63 +21,10 @@ export type ScanSummary = {
     topExtensions: { ext: string; count: number }[];
 };
 
-// --- Initial Constants ---
+// MOCK_DOCS removed as per request to rely solely on store
 
-const MOCK_DOCS: DocumentAnalysis[] = [
-    {
-        basic: {
-            id: "1",
-            fileName: "Factura_Global_Oct.pdf",
-            extension: "pdf",
-            sizeBytes: 1250000,
-            uploadedAt: "2024-10-25T10:30:00Z",
-            kind: "invoice",
-            scan: { phase: "completed", estimatedQuickMs: 0, errorMessage: null },
-            ocrEligible: true
-        },
-        metadata: {
-            author: "Finanzas Corp",
-            createdAt: "2024-10-24T09:00:00Z",
-            software: "Adobe PDF Library 15.0",
-            pageCount: 3,
-            hasMetadataScan: true
-        },
-        keyData: {
-            amounts: [15400.50, 2464.08],
-            rfcs: ["XAXX010101000"],
-            dates: ["2024-10-24"],
-            hasQuickScan: true,
-            names: [],
-            keys: []
-        },
-        classificationConfidence: 0.98
-    },
-    {
-        basic: { id: "2", fileName: "Contrato_Servicios_2024.docx", extension: "docx", sizeBytes: 45000, uploadedAt: "2024-11-01T14:15:00Z", kind: "contract", scan: { phase: "completed", estimatedQuickMs: 0 }, ocrEligible: false },
-        metadata: { author: "Legal Dept", createdAt: "2024-10-28T11:20:00Z", software: "Microsoft Word", modifiedAt: "2024-10-30T16:00:00Z" },
-        keyData: { names: ["Juan Pérez", "Empresa X S.A."], dates: ["2024-11-01", "2025-11-01"], rfcs: [], amounts: [], keys: [] }, classificationConfidence: 0.95
-    },
-    {
-        basic: { id: "3", fileName: "Ticket_Compra_Material.jpg", extension: "jpg", sizeBytes: 2100000, uploadedAt: "2024-11-02T09:00:00Z", kind: "receipt", scan: { phase: "completed", estimatedQuickMs: 0 }, ocrEligible: true },
-        metadata: { device: "iPhone 14 Pro", gpsCoordinates: { lat: 19.4326, lng: -99.1332 }, createdAt: "2024-11-02T08:45:00Z" },
-        keyData: { amounts: [450.00], dates: ["2024-11-02"], names: [], rfcs: [], keys: [] }, classificationConfidence: 0.89
-    },
-    {
-        basic: { id: "4", fileName: "Reporte_Anual_2023.pdf", extension: "pdf", sizeBytes: 5600000, uploadedAt: "2024-01-15T10:00:00Z", kind: "report", scan: { phase: "deep-scannable", estimatedQuickMs: 0 }, ocrEligible: true },
-        metadata: { author: "CEO Office", pageCount: 45, software: "InDesign" },
-        keyData: { dates: ["2023-01-01", "2023-12-31"], names: [], rfcs: [], amounts: [], keys: [] }, classificationConfidence: 0.99
-    },
-    {
-        basic: { id: "5", fileName: "Nomina_Quincena_20.xml", extension: "xml", sizeBytes: 15000, uploadedAt: "2024-10-31T18:00:00Z", kind: "payroll", scan: { phase: "completed", estimatedQuickMs: 0 }, ocrEligible: false },
-        metadata: { createdAt: "2024-10-31T17:55:00Z" },
-        keyData: { amounts: [12000.00], rfcs: ["PEPJ800101XYZ"], names: [], dates: [], keys: [] }, classificationConfidence: 1.0
-    },
-    {
-        basic: { id: "6", fileName: "Scan_Unknown_001.png", extension: "png", sizeBytes: 3200000, uploadedAt: "2024-11-03T08:10:00Z", kind: "unknown", scan: { phase: "queued", estimatedQuickMs: 1500 }, ocrEligible: true },
-        metadata: { device: "Scanner Epson", createdAt: "2024-11-03T08:05:00Z" },
-        keyData: { names: [], rfcs: [], dates: [], amounts: [], keys: [] }, classificationConfidence: 0.4
-    }
-];
+
+// --- Initial Constants ---
 
 const DEFAULT_FILTERS: DocumentsFilters = { search: "", kind: "all", hasMetadata: "all", sizeBucket: "all" };
 
@@ -99,7 +46,7 @@ type GlobalState = {
 };
 
 let storeState: GlobalState = {
-    items: MOCK_DOCS,
+    items: [],
     filters: DEFAULT_FILTERS,
     selectedId: null,
     scanJob: DEFAULT_SCAN_JOB,

@@ -1,85 +1,83 @@
-import { useDocumentsStore } from '../../store/useDocumentsStore';
-import { type DocumentAnalysis } from '../../types/documents';
+import type { DocumentAnalysis, ScanJobMetrics } from "../../types/documents";
 
 interface ScanSummaryStripProps {
     documents: DocumentAnalysis[];
+    scanJob: ScanJobMetrics;
 }
 
-export function ScanSummaryStrip({ }: ScanSummaryStripProps) {
-    const { scanJob, summary } = useDocumentsStore();
+export function ScanSummaryStrip({ documents, scanJob }: ScanSummaryStripProps) {
 
-    const totalDocs = summary.totalDocs;
-    const uniqueTypes = summary.detectedTypes;
-    const pctMetadata = summary.docsWithMetadataPct;
+    const totalDocs = documents.length;
 
-    const sizeMb = (summary.totalSizeBytes / (1024 * 1024)).toFixed(1);
+    // Calculate metrics
+    // Tipos únicos
+    const tiposDetectados = new Set(documents.map(d => d.basic.kind)).size;
 
-    // Scan progress calculation
+    // Total size MB
+    const totalSizeMb = (documents.reduce((acc, d) => acc + d.basic.sizeBytes, 0) / (1024 * 1024));
+
+    // Docs w/ metadata
+    // Metadatos válidos si tiene al menos author o software o device, etc.
+    const docsWithMeta = documents.filter(d =>
+        (d.metadata.author || d.metadata.software || d.metadata.device || d.metadata.exifCamera)
+    ).length;
+
+    const metaPct = totalDocs > 0 ? (docsWithMeta / totalDocs) * 100 : 0;
+
     const isScanning = scanJob.isScanning;
     const progressPct = scanJob.totalFiles > 0
-        ? Math.round((scanJob.processedFiles / scanJob.totalFiles) * 100)
-        : 100;
-
-    const estimatedSec = scanJob.estimatedMsRemaining
-        ? Math.ceil(scanJob.estimatedMsRemaining / 1000)
+        ? (scanJob.processedFiles / scanJob.totalFiles) * 100
         : 0;
 
     return (
-        <div className="flex flex-col gap-3">
-            {/* Main Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <Card label="Total Documentos" value={String(totalDocs)} />
-                <Card label="Tipos Detectados" value={String(uniqueTypes)} />
-                <Card label="Docs con Metadatos" value={`${pctMetadata}%`} />
-                <Card label="Tamaño Total" value={`${sizeMb} MB`} />
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 rounded-xl bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
 
-            {/* Scan Progress Strip */}
-            {isScanning ? (
-                <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900 p-3 flex flex-col gap-2 animate-pulse">
-                    <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 text-blue-500 animate-spin border-2 border-blue-500 border-t-transparent rounded-full font-bold"></div>
-                            <span className="font-medium text-blue-700 dark:text-blue-300">
-                                Escaneando {scanJob.processedFiles} / {scanJob.totalFiles} documentos...
-                            </span>
-                        </div>
-                        <span className="text-blue-600 dark:text-blue-400 font-mono">
-                            ~{estimatedSec} s restantes
-                        </span>
-                    </div>
-                    <div className="w-full bg-blue-200 dark:bg-blue-800 rounded-full h-1.5 mt-1">
-                        <div
-                            className="bg-blue-600 dark:bg-blue-400 h-1.5 rounded-full transition-all duration-300"
-                            style={{ width: `${progressPct}%` }}
-                        ></div>
-                    </div>
+            {/* Si está escaneando, mostramos barra de progreso overlay o integrada */}
+            {isScanning && (
+                <div className="absolute top-0 left-0 w-full h-1 bg-blue-100 dark:bg-blue-900/30">
+                    <div
+                        className="h-full bg-blue-600 transition-all duration-300"
+                        style={{ width: `${progressPct}%` }}
+                    />
                 </div>
-            ) : (
-                scanJob.totalFiles > 0 && scanJob.processedFiles === scanJob.totalFiles && (
-                    <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900 p-2 px-3 flex items-center gap-2 text-sm">
-                        <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span className="text-emerald-700 dark:text-emerald-300">
-                            Escaneo rápido completado. Listo para análisis detallado.
-                        </span>
-                    </div>
-                )
             )}
+
+            <MetricCard
+                label="TOTAL DOCUMENTOS"
+                value={totalDocs}
+                subtext={isScanning ? `${scanJob.processedFiles} procesados` : "Archivos cargados"}
+            />
+            <MetricCard
+                label="TIPOS DETECTADOS"
+                value={tiposDetectados}
+                subtext="Formatos únicos"
+            />
+            <MetricCard
+                label="DOCS CON METADATOS"
+                value={`${metaPct.toFixed(1)}%`}
+                subtext={`${docsWithMeta} de ${totalDocs} archivos`}
+            />
+            <MetricCard
+                label="TAMAÑO TOTAL"
+                value={`${totalSizeMb.toFixed(1)} MB`}
+                subtext="Volumen de datos"
+            />
         </div>
     );
 }
 
-function Card({ label, value }: { label: string; value: string }) {
+interface MetricCardProps {
+    label: string;
+    value: string | number;
+    subtext: string;
+}
+
+function MetricCard({ label, value, subtext }: MetricCardProps) {
     return (
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 px-4 py-3 flex flex-col">
-            <span className="text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                {label}
-            </span>
-            <span className="text-2xl font-light text-slate-900 dark:text-slate-100">
-                {value}
-            </span>
+        <div className="rounded-xl bg-white/50 dark:bg-slate-900/50 p-3 flex flex-col">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1">{label}</span>
+            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">{value}</div>
+            <p className="text-xs text-slate-500 mt-1 truncate">{subtext}</p>
         </div>
     );
 }
